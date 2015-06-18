@@ -1,0 +1,65 @@
+# This PowerShell script copies all of the blob content from one Azure storage account to another account
+Select-AzureSubscription "[AZURE_SUBSCRIPTION_NAME]" 
+ 
+### Source Blob - authenticated container ###
+$srcUri = "https://[AZURE_ACCOUNT_NAME].blob.core.windows.net/" 
+
+### MOVING FORWARD WE WILL NEED TO REMOVE THESE ACCOUNT NAMES AND KEYS - THEY ARE HERE FOR ILLUSTRATIVE PURPOSES
+
+ 
+### Source Storage Account (South Central US) ###
+$srcStorageAccount = "AZURE_ACCOUNT_NAME"
+$srcStorageKey = "AZURE_ACCOUNT_KEY"
+ 
+ 
+### Create the source storage account context ### 
+$srcContext = New-AzureStorageContext  –StorageAccountName $srcStorageAccount `
+                                        -StorageAccountKey $srcStorageKey  
+ 
+ 
+### Target Storage Account (South Central US) ###
+$storageAccount = "AZURE_ACCOUNT_NAME"
+$storageKey = "AZURE_ACCOUNT_KEY"
+
+
+
+### Create the destination context for authenticating the copy
+$destContext = New-AzureStorageContext  –StorageAccountName $storageAccount `
+                                        -StorageAccountKey $storageKey
+
+
+
+
+Get-AzureStorageContainer -Context $srcContext | ForEach-Object {
+    
+    $containerName = $_.Name
+
+    # check to see if the srcContainer is already in destContext. If not create it
+    $destContainer = Get-AzureStorageContainer -Context $destContext -Name $containerName
+    if ($destContainer -eq $null) {         
+        $destContainer = New-AzureStorageContainer -Context $destContext -Name $containerName
+    
+        # set destination container ACL to full read access for dev purposes
+        Set-AzureStorageContainerAcl -Context $destContext -Name $containerName -Permission container
+    } 
+
+    $srcUri = $srcContext.BlobEndPoint + $containerName +"/"
+
+    # just copy all of the containers whose permission is either blob or container
+    $srcContainerAcl = Get-AzureStorageContainerAcl -Context $srcContext -Name $containerName
+    if ($srcContainerAcl.PublicAccess -ne "off") {
+        
+        # for each $srcContainer let's get all of its blobs copied over too
+        Get-AzureStorageBlob -Container $containerName -Context $srcContext | ForEach-Object {
+    
+            $blobcopy = Start-AzureStorageBlobCopy `
+                                                -SrcUri $srcUri$($_.Name) `
+                                                -DestContainer $containerName `
+                                                -DestBlob $_.Name `
+                                                -DestContext $destContext `
+                                                -Force
+            # output status
+            $blobcopy | Get-AzureStorageBlobCopyState
+        }
+    }
+}
