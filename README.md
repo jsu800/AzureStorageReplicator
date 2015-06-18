@@ -1,0 +1,2 @@
+# AzureStorageReplicator
+Windows PowerShell templates
